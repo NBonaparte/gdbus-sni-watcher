@@ -167,6 +167,7 @@ static void handle_method_call(GDBusConnection *c, const gchar *sender, const gc
 		gpointer user_data) {
 	const gchar *tmp;
 	g_variant_get(param, "(&s)", &tmp);
+	//might have to be sender + service
 	const gchar *service = g_strdup(tmp);
 
 	printf("%s called method '%s', args '%s'\n", sender, method_name, service);
