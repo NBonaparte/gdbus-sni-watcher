@@ -18,6 +18,7 @@ enum {
 	PROP_HOSTS,
 	PROP_ITEMS
 };
+static Watcher *watcher = NULL;
 static GDBusNodeInfo *intro_data = NULL;
 static const gchar *watcher_path = "/StatusNotifierWatcher";
 static const gchar xml_data[] =
@@ -126,8 +127,9 @@ static void watcher_remove_from_array(Watcher *watcher, GVariant *prop, const gc
 			new[j] = orig[i];
 		}
 		g_object_set(watcher, prop_name, g_variant_new_strv(new, size - 1), NULL);
-		g_strfreev(orig);
+		g_free((gchar *) name);
 	}
+	g_strfreev(orig);
 
 }
 static void watcher_add_to_array(Watcher *watcher, GVariant *prop, const gchar *prop_name, const gchar *name) {
@@ -142,42 +144,45 @@ static void watcher_add_to_array(Watcher *watcher, GVariant *prop, const gchar *
 	g_strfreev(orig);
 }
 
+static void item_appeared_handler(GDBusConnection *c, const gchar *name, const gchar *owner, gpointer user_data) {
+	watcher_add_to_array(watcher, watcher->items, "items", user_data);
+}
+
 static void item_vanished_handler(GDBusConnection *c, const gchar *name, gpointer user_data) {
 	printf("Item %s has vanished\n", name);
-	Watcher *watcher = user_data;
-	watcher_remove_from_array(watcher, watcher->items, "items", name);
+	watcher_remove_from_array(watcher, watcher->items, "items", user_data);
 	g_dbus_connection_emit_signal(c, NULL, watcher_path, "org.freedesktop.DBus.Properties",
 		"StatusNotifierItemUnregistered", g_variant_new("(s)", name), NULL);
 
 }
+static void host_appeared_handler(GDBusConnection *c, const gchar *name, const gchar *owner, gpointer user_data) {
+	watcher_add_to_array(watcher, watcher->hosts, "hosts", user_data);
+}
 static void host_vanished_handler(GDBusConnection *c, const gchar *name, gpointer user_data) {
 	printf("Host %s has vanished\n", name);
-	Watcher *watcher = user_data;
-	watcher_remove_from_array(watcher, watcher->hosts, "hosts", name);
+	watcher_remove_from_array(watcher, watcher->hosts, "hosts", user_data);
 }
 static void handle_method_call(GDBusConnection *c, const gchar *sender, const gchar *obj_path,
 		const gchar *int_name, const gchar *method_name, GVariant *param, GDBusMethodInvocation *invoc,
 		gpointer user_data) {
-	Watcher *watcher = user_data;
-	const gchar *service;
-	g_variant_get(param, "(&s)", &service);
+	const gchar *tmp;
+	g_variant_get(param, "(&s)", &tmp);
+	const gchar *service = g_strdup(tmp);
 
-	printf("%s called method '%s'\n", sender, method_name);
+	printf("%s called method '%s', args '%s'\n", sender, method_name, service);
 	if(g_strcmp0(method_name, "RegisterStatusNotifierItem") == 0) {
-		watcher_add_to_array(watcher, watcher->items, "items", service);
 		g_dbus_method_invocation_return_value(invoc, NULL);
 		g_dbus_connection_emit_signal(c, NULL, watcher_path, "org.freedesktop.DBus.Properties",
 				"StatusNotifierItemRegistered", g_variant_new("(s)", sender),  NULL);
 		g_bus_watch_name(G_BUS_TYPE_SESSION, sender,
-			G_BUS_NAME_OWNER_FLAGS_NONE, NULL, item_vanished_handler, user_data, NULL);
+			G_BUS_NAME_OWNER_FLAGS_NONE, item_appeared_handler, item_vanished_handler, (gpointer) service, NULL);
 	}
 	else if(g_strcmp0(method_name, "RegisterStatusNotifierHost") == 0) {
-		watcher_add_to_array(watcher, watcher->hosts, "hosts", service);
 		g_dbus_method_invocation_return_value(invoc, NULL);
 		g_dbus_connection_emit_signal(c, NULL, watcher_path, "org.freedesktop.DBus.Properties",
 				"StatusNotifierHostRegistered", g_variant_new("(s)", sender), NULL);
 		g_bus_watch_name(G_BUS_TYPE_SESSION, sender,
-			G_BUS_NAME_OWNER_FLAGS_NONE, NULL, host_vanished_handler, user_data, NULL);
+			G_BUS_NAME_OWNER_FLAGS_NONE, host_appeared_handler, host_vanished_handler, (gpointer) service, NULL);
 	}
 
 }
@@ -185,7 +190,6 @@ static void handle_method_call(GDBusConnection *c, const gchar *sender, const gc
 static GVariant * handle_get_property(GDBusConnection *connection, const gchar *sender, const gchar *obj_path,
 		const gchar *int_name, const gchar *prop_name, GError **error, gpointer user_data) {
 	GVariant *ret;
-	Watcher *watcher = user_data;
 	printf("%s requested property '%s'\n", sender, prop_name);
 	if(g_strcmp0(prop_name, "RegisteredStatusNotifierItems") == 0) {
 		g_object_get(watcher, "items",  &ret, NULL);
@@ -216,7 +220,7 @@ static void on_bus_acquired(GDBusConnection *c, const gchar *name, gpointer user
 
 	printf("Acquired connection to bus\n");
 	reg_id = g_dbus_connection_register_object(c, watcher_path, intro_data->interfaces[0], &int_vtable,
-			user_data, NULL, NULL);
+			NULL, NULL, NULL);
 	g_assert(reg_id > 0);
 
 }
@@ -230,7 +234,6 @@ static void on_name_lost(GDBusConnection *c, const gchar *name, gpointer user_da
 }
 
 int main() {
-	Watcher *watcher;
 	guint stat_watch;
 	GMainLoop *loop;
 	//Is it org.kde or org.freedesktop?
@@ -242,7 +245,7 @@ int main() {
 
 	loop = g_main_loop_new(NULL, FALSE);
 	stat_watch = g_bus_own_name(G_BUS_TYPE_SESSION, name, G_BUS_NAME_OWNER_FLAGS_REPLACE, on_bus_acquired,
-			on_name_acquired, on_name_lost, watcher, NULL);
+			on_name_acquired, on_name_lost, NULL, NULL);
 	g_main_loop_run(loop);
 	g_bus_unown_name(stat_watch);
 	g_dbus_node_info_unref(intro_data);

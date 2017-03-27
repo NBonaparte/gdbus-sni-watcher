@@ -34,3 +34,5 @@
 
 # Vim swap files
 *.sw*
+
+gd-watcher
