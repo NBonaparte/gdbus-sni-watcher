@@ -20,6 +20,7 @@ enum {
 };
 static Watcher *watcher = NULL;
 static GDBusNodeInfo *intro_data = NULL;
+static const gchar watcher_name[] = "org.kde.StatusNotifierWatcher";
 static const gchar *watcher_path = "/StatusNotifierWatcher";
 static const gchar xml_data[] =
 	"<!DOCTYPE node PUBLIC '-//freedesktop//DTD D-BUS Object Introspection 1.0//EN' 'http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd'>"
@@ -115,7 +116,7 @@ static void watcher_remove_from_array(Watcher *watcher, GVariant *prop, const gc
 	gchar **orig = g_variant_dup_strv(prop, &size);
 	if(size > 0) {
 		const gchar *new[size - 1];
-		printf("Removing %s to %s, new size: %lu\n", name, prop_name, size - 1);
+		printf("Removing %s from %s, new size: %lu\n", name, prop_name, size - 1);
 		int j = 0;
 		for(int i = 0; i < size; i++, j++) {
 			if(g_strcmp0(orig[i], name) == 0) {
@@ -151,7 +152,7 @@ static void item_appeared_handler(GDBusConnection *c, const gchar *name, const g
 static void item_vanished_handler(GDBusConnection *c, const gchar *name, gpointer user_data) {
 	printf("Item %s has vanished\n", name);
 	watcher_remove_from_array(watcher, watcher->items, "items", user_data);
-	g_dbus_connection_emit_signal(c, NULL, watcher_path, "org.freedesktop.DBus.Properties",
+	g_dbus_connection_emit_signal(c, NULL, watcher_path, watcher_name,
 		"StatusNotifierItemUnregistered", g_variant_new("(s)", name), NULL);
 
 }
@@ -173,14 +174,14 @@ static void handle_method_call(GDBusConnection *c, const gchar *sender, const gc
 	printf("%s called method '%s', args '%s'\n", sender, method_name, service);
 	if(g_strcmp0(method_name, "RegisterStatusNotifierItem") == 0) {
 		g_dbus_method_invocation_return_value(invoc, NULL);
-		g_dbus_connection_emit_signal(c, NULL, watcher_path, "org.freedesktop.DBus.Properties",
+		g_dbus_connection_emit_signal(c, NULL, watcher_path, watcher_name,
 				"StatusNotifierItemRegistered", g_variant_new("(s)", sender),  NULL);
 		g_bus_watch_name(G_BUS_TYPE_SESSION, sender,
 			G_BUS_NAME_OWNER_FLAGS_NONE, item_appeared_handler, item_vanished_handler, (gpointer) service, NULL);
 	}
 	else if(g_strcmp0(method_name, "RegisterStatusNotifierHost") == 0) {
 		g_dbus_method_invocation_return_value(invoc, NULL);
-		g_dbus_connection_emit_signal(c, NULL, watcher_path, "org.freedesktop.DBus.Properties",
+		g_dbus_connection_emit_signal(c, NULL, watcher_path, watcher_name,
 				"StatusNotifierHostRegistered", g_variant_new("(s)", sender), NULL);
 		g_bus_watch_name(G_BUS_TYPE_SESSION, sender,
 			G_BUS_NAME_OWNER_FLAGS_NONE, host_appeared_handler, host_vanished_handler, (gpointer) service, NULL);
@@ -238,15 +239,14 @@ int main() {
 	guint stat_watch;
 	GMainLoop *loop;
 	//Is it org.kde or org.freedesktop?
-	const gchar name[] = "org.kde.StatusNotifierWatcher";
 
 	intro_data = g_dbus_node_info_new_for_xml(xml_data, NULL);
 	g_assert(intro_data != NULL);
 	watcher = g_object_new(watcher_get_type(), NULL);
 
 	loop = g_main_loop_new(NULL, FALSE);
-	stat_watch = g_bus_own_name(G_BUS_TYPE_SESSION, name, G_BUS_NAME_OWNER_FLAGS_REPLACE, on_bus_acquired,
-			on_name_acquired, on_name_lost, NULL, NULL);
+	stat_watch = g_bus_own_name(G_BUS_TYPE_SESSION, watcher_name, G_BUS_NAME_OWNER_FLAGS_REPLACE,
+			on_bus_acquired, on_name_acquired, on_name_lost, NULL, NULL);
 	g_main_loop_run(loop);
 	g_bus_unown_name(stat_watch);
 	g_dbus_node_info_unref(intro_data);
