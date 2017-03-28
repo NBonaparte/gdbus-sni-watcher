@@ -3,4 +3,4 @@ StatusNotifierWatcher service implementation using GDBus
 
 ## Dependencies
 * GDBus (duh)
-  * `dbus-glib` on Arch Linux
+  * part of `glib2` on Arch Linux
