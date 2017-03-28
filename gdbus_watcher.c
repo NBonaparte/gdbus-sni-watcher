@@ -166,12 +166,14 @@ static void host_vanished_handler(GDBusConnection *c, const gchar *name, gpointe
 static void handle_method_call(GDBusConnection *c, const gchar *sender, const gchar *obj_path,
 		const gchar *int_name, const gchar *method_name, GVariant *param, GDBusMethodInvocation *invoc,
 		gpointer user_data) {
-	const gchar *tmp;
+	const gchar *tmp, *service;
 	g_variant_get(param, "(&s)", &tmp);
-	//might have to be sender + service
-	const gchar *service = g_strdup(tmp);
+	if(tmp[0] == '/')
+		service = g_strconcat(sender, tmp, NULL);
+	else
+		service = g_strconcat(sender, "/StatusNotifierItem", NULL);
 
-	printf("%s called method '%s', args '%s'\n", sender, method_name, service);
+	printf("%s called method '%s', args '%s'\n", sender, method_name, tmp);
 	if(g_strcmp0(method_name, "RegisterStatusNotifierItem") == 0) {
 		g_dbus_method_invocation_return_value(invoc, NULL);
 		g_dbus_connection_emit_signal(c, NULL, watcher_path, watcher_name,
