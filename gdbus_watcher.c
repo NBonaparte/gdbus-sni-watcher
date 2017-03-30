@@ -168,13 +168,14 @@ static void handle_method_call(GDBusConnection *c, const gchar *sender, const gc
 		gpointer user_data) {
 	const gchar *tmp, *service;
 	g_variant_get(param, "(&s)", &tmp);
-	if(tmp[0] == '/')
-		service = g_strconcat(sender, tmp, NULL);
-	else
-		service = g_strconcat(sender, "/StatusNotifierItem", NULL);
 
 	printf("%s called method '%s', args '%s'\n", sender, method_name, tmp);
 	if(g_strcmp0(method_name, "RegisterStatusNotifierItem") == 0) {
+		if(tmp[0] == '/')
+			service = g_strconcat(sender, tmp, NULL);
+		else
+			service = g_strconcat(sender, "/StatusNotifierItem", NULL);
+
 		g_dbus_method_invocation_return_value(invoc, NULL);
 		g_dbus_connection_emit_signal(c, NULL, watcher_path, watcher_name,
 				"StatusNotifierItemRegistered", g_variant_new("(s)", sender),  NULL);
@@ -182,6 +183,7 @@ static void handle_method_call(GDBusConnection *c, const gchar *sender, const gc
 			G_BUS_NAME_OWNER_FLAGS_NONE, item_appeared_handler, item_vanished_handler, (gpointer) service, NULL);
 	}
 	else if(g_strcmp0(method_name, "RegisterStatusNotifierHost") == 0) {
+		service = g_strdup(sender);
 		g_dbus_method_invocation_return_value(invoc, NULL);
 		g_dbus_connection_emit_signal(c, NULL, watcher_path, watcher_name,
 				"StatusNotifierHostRegistered", g_variant_new("(s)", sender), NULL);
