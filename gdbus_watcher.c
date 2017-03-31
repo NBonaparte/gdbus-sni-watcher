@@ -128,7 +128,7 @@ static void watcher_remove_from_array(Watcher *watcher, GVariant *prop, const gc
 			new[j] = orig[i];
 		}
 		g_object_set(watcher, prop_name, g_variant_new_strv(new, size - 1), NULL);
-		g_free((gchar *) name);
+		//g_free((gchar *) name);
 	}
 	g_strfreev(orig);
 
@@ -150,11 +150,12 @@ static void item_appeared_handler(GDBusConnection *c, const gchar *name, const g
 }
 
 static void item_vanished_handler(GDBusConnection *c, const gchar *name, gpointer user_data) {
-	printf("Item %s has vanished\n", name);
-	watcher_remove_from_array(watcher, watcher->items, "items", user_data);
+	gchar *service = user_data;
+	printf("Item %s has vanished\n", service);
+	watcher_remove_from_array(watcher, watcher->items, "items", service);
 	g_dbus_connection_emit_signal(c, NULL, watcher_path, watcher_name,
-		"StatusNotifierItemUnregistered", g_variant_new("(s)", name), NULL);
-
+		"StatusNotifierItemUnregistered", g_variant_new("(s)", service), NULL);
+	g_free(service);
 }
 static void host_appeared_handler(GDBusConnection *c, const gchar *name, const gchar *owner, gpointer user_data) {
 	watcher_add_to_array(watcher, watcher->hosts, "hosts", user_data);
@@ -166,6 +167,7 @@ static void host_vanished_handler(GDBusConnection *c, const gchar *name, gpointe
 static void handle_method_call(GDBusConnection *c, const gchar *sender, const gchar *obj_path,
 		const gchar *int_name, const gchar *method_name, GVariant *param, GDBusMethodInvocation *invoc,
 		gpointer user_data) {
+	gboolean proxy = FALSE;
 	const gchar *tmp, *service;
 	g_variant_get(param, "(&s)", &tmp);
 
@@ -175,15 +177,17 @@ static void handle_method_call(GDBusConnection *c, const gchar *sender, const gc
 		if(tmp[0] == '/')
 			service = g_strconcat(sender, tmp, NULL);
 		//xembedsniproxy sends item name, so we should use the item from the argument
-		else if(tmp[0] == ':')
+		else if(tmp[0] == ':') {
 			service = g_strconcat(tmp, "/StatusNotifierItem", NULL);
+			proxy = TRUE;
+		}
 		else
 			service = g_strconcat(sender, "/StatusNotifierItem", NULL);
 
 		g_dbus_method_invocation_return_value(invoc, NULL);
 		g_dbus_connection_emit_signal(c, NULL, watcher_path, watcher_name,
-				"StatusNotifierItemRegistered", g_variant_new("(s)", sender),  NULL);
-		g_bus_watch_name(G_BUS_TYPE_SESSION, sender,
+				"StatusNotifierItemRegistered", g_variant_new("(s)", service),  NULL);
+		g_bus_watch_name(G_BUS_TYPE_SESSION, proxy ? tmp : sender,
 			G_BUS_NAME_OWNER_FLAGS_NONE, item_appeared_handler, item_vanished_handler, (gpointer) service, NULL);
 	}
 	else if(g_strcmp0(method_name, "RegisterStatusNotifierHost") == 0) {
