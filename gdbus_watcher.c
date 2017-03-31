@@ -171,8 +171,12 @@ static void handle_method_call(GDBusConnection *c, const gchar *sender, const gc
 
 	printf("%s called method '%s', args '%s'\n", sender, method_name, tmp);
 	if(g_strcmp0(method_name, "RegisterStatusNotifierItem") == 0) {
+		//libappindicator sends object path, so we should use sender name and object path
 		if(tmp[0] == '/')
 			service = g_strconcat(sender, tmp, NULL);
+		//xembedsniproxy sends item name, so we should use the item from the argument
+		else if(tmp[0] == ':')
+			service = g_strconcat(tmp, "/StatusNotifierItem", NULL);
 		else
 			service = g_strconcat(sender, "/StatusNotifierItem", NULL);
 
