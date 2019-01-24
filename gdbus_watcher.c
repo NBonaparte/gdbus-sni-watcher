@@ -217,8 +217,7 @@ static GVariant * handle_get_property(GDBusConnection *connection, const gchar *
 		ret = g_variant_new_boolean(size > 0);
 	}
 	else if(g_strcmp0(prop_name, "ProtocolVersion") == 0) {
-		//TODO find out what this should actually be
-		ret = g_variant_new_int32(1);
+		ret = g_variant_new_int32(0);
 	}
 	return ret;
 }
